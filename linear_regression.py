@@ -9,6 +9,10 @@ def normalize_data(data: np.ndarray) -> np.ndarray:
     """ Standardize inputs to have zero mean and unit variance. """
     return (data - np.mean(data)) / (np.std(data) + 1e-10)  # Avoid division by zero
 
+# Denormalization function
+def denormalize_data(norm_data, orig_data):
+    return norm_data * np.std(orig_data) + np.mean(orig_data)
+
 
 def forward_pass(coeff: tuple[float, float], inputs: np.ndarray[float]) -> np.ndarray[float]:
     """ Pass inputs into linear function with given coefficients. Return outputs.
@@ -65,10 +69,14 @@ if __name__ == "__main__":
             data = line.rstrip().split(',')
             if data[0] != '' and data[1] != '':
                 x_list.append(float(data[0]))
-                y_list.append(float(data[1]) / float(10 ** 6))
+                y_list.append(float(data[1]))
         xs = np.array(x_list)
         ys = np.array(y_list)
     # Normalize your dataset before training
+
+    orig_xs = xs.copy()
+    orig_ys = ys.copy()
+
     xs = normalize_data(xs)
     ys = normalize_data(ys)
 
@@ -81,11 +89,16 @@ if __name__ == "__main__":
     r2 = data[2]
 
     # Plot Data
-    x = np.arange(np.min(xs), np.max(xs), 0.05)
-    y = coeff[0] * x + coeff[1]
+    x_plot = np.linspace(np.min(orig_xs), np.max(orig_xs), 100)
 
-    plt.plot(x, y, color='r')
-    plt.scatter(xs, ys, color='g')
+    # Compute predicted y values using trained model
+    y_norm_pred = coeff[0] * ((x_plot - np.mean(orig_xs)) / np.std(orig_xs)) + coeff[1]
+
+    # Denormalize y values back to salary range
+    y_plot = denormalize_data(y_norm_pred, orig_ys)
+
+    plt.plot(x_plot, y_plot, color='r')
+    plt.scatter(orig_xs, orig_ys, color='g')
 
     # Naming the x-axis, y-axis and the whole graph
     plt.xlabel("Years Worked")
