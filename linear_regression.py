@@ -5,6 +5,10 @@ import sys
 import numpy as np
 from matplotlib import pyplot as plt
 
+def normalize_data(data: np.ndarray) -> np.ndarray:
+    """ Standardize inputs to have zero mean and unit variance. """
+    return (data - np.mean(data)) / (np.std(data) + 1e-10)  # Avoid division by zero
+
 
 def forward_pass(coeff: tuple[float, float], inputs: np.ndarray[float]) -> np.ndarray[float]:
     """ Pass inputs into linear function with given coefficients. Return outputs.
@@ -17,27 +21,33 @@ def forward_pass(coeff: tuple[float, float], inputs: np.ndarray[float]) -> np.nd
 def compute_loss(model_outs: np.ndarray[float], acc_outs: np.ndarray[float]) -> float:
     """ Return the mean squared error of the model's predicted outputs
     """
-    return np.sqrt(sum(np.square(pred - acc) for pred, acc in zip(model_outs, acc_outs)))
+    return np.mean(sum(np.square(pred - acc) for pred, acc in zip(model_outs, acc_outs)))
 
 def compute_grad(inputs: np.ndarray[float], model_outs: np.ndarray[float], acc_outs: np.ndarray[float]) -> tuple[float, float]:
     """ Compute the gradient vector for the coefficients of the linear function
     """
-    loss = compute_loss(model_outs, acc_outs)
-    a_grad = sum((pred - acc) * inp for pred, acc, inp in zip(model_outs, acc_outs, inputs)) / loss
-    b_grad = sum(pred - acc for pred, acc in zip(model_outs, acc_outs)) / loss
+    n = len(inputs)
+    a_grad = (-2 / n) * np.sum((acc_outs - model_outs) * inputs)
+    b_grad = (-2 / n) * np.sum(acc_outs - model_outs)
     return a_grad, b_grad
 
-def regression(inputs: np.ndarray[float], acc_outs: np.ndarray[float], coeff: tuple[float, float], iterations=100, learning_rate=0.5) -> tuple[float, float, float]:
+def regression(inputs: np.ndarray[float], acc_outs: np.ndarray[float], coeff: tuple[float, float], iterations=10000, learning_rate=0.01) -> tuple[float, float, float]:
     """ Return a tuple of the optimized coefficients, and the r-squared value after the given number of
     training iterations. 
     """
-
-    for _ in iterations:
-        model_outs = forward_pass(coeff, inputs)
+    a = coeff[0]
+    b = coeff[1]
+    for _ in range(iterations):
+        model_outs = forward_pass((a, b), inputs)
         grad = compute_grad(inputs, model_outs, acc_outs)
-        coeff[0] += -1 * grad[0] * learning_rate
-        coeff[1] += -1 * grad[1] * learning_rate
-    return coeff
+        a -= grad[0] * learning_rate
+        b -= grad[1] * learning_rate
+
+    y_mean = np.mean(acc_outs)
+    ss_total = np.sum((acc_outs - y_mean) ** 2)
+    ss_residual = np.sum((acc_outs - forward_pass((a, b), inputs)) ** 2)
+    r2 = 1 - (ss_residual / ss_total) if ss_total != 0 else 0
+    return (a, b, r2)
 
 if __name__ == "__main__":
     try:
@@ -47,18 +57,40 @@ if __name__ == "__main__":
         sys.exit(1)
 
     xs, ys = np.array([]), np.array([])
-    with open(file_name, "r") as f:
+    with open('clean_data/' + file_name + '.txt', "r") as f:
         lines = f.readlines()
+        labels = lines[0]
         x_list, y_list = [], []
-        for line in lines:
-            x_list.append(float(line[0]))
-            y_list.append(float(line[1]))
+        for line in lines[1:]:
+            data = line.rstrip().split(',')
+            if data[0] != '' and data[1] != '':
+                x_list.append(float(data[0]))
+                y_list.append(float(data[1]) / float(10 ** 6))
         xs = np.array(x_list)
         ys = np.array(y_list)
+    # Normalize your dataset before training
+    xs = normalize_data(xs)
+    ys = normalize_data(ys)
 
     # initialize coefficients
-    a = 1.0
-    b = 0.0
+    coeff = (1, 0)
 
     # Regression
-    optimized_coeff = regression(xs, ys, (a, b))
+    data = regression(xs, ys, coeff)
+    coeff = (data[0], data[1])
+    r2 = data[2]
+
+    # Plot Data
+    x = np.arange(np.min(xs), np.max(xs), 0.05)
+    y = coeff[0] * x + coeff[1]
+
+    plt.plot(x, y, color='r')
+    plt.scatter(xs, ys, color='g')
+
+    # Naming the x-axis, y-axis and the whole graph
+    plt.xlabel("Years Worked")
+    plt.ylabel("Salary")
+    plt.title(f"Salary versus Years worked: R^2: {round(r2, 3)}")
+
+    # To load the display window
+    plt.show()
